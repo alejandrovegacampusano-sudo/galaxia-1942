@@ -10,10 +10,13 @@
 <meta name="theme-color" content="#02040a">
 <link rel="apple-touch-icon" href="icon.jpg">
 <link rel="icon" href="icon.jpg">
+<link rel="manifest" href="manifest.webmanifest">
 <title>Galaxia 1942</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
 <style>
+  /* tipografias locales para que el juego funcione sin conexion */
+  @font-face { font-family: 'Orbitron'; font-weight: 400 900; font-display: swap; src: url(fonts/orbitron.woff2) format('woff2'); }
+  @font-face { font-family: 'Rajdhani'; font-weight: 500; font-display: swap; src: url(fonts/rajdhani-500.woff2) format('woff2'); }
+  @font-face { font-family: 'Rajdhani'; font-weight: 700; font-display: swap; src: url(fonts/rajdhani-700.woff2) format('woff2'); }
   :root { --bg: #02040a; }
   html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
   body { display: flex; align-items: center; justify-content: center; }
@@ -1516,6 +1519,11 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+// el canvas no dispara la carga de fuentes por si solo
+if (document.fonts) ['700 16px Orbitron', '500 16px Rajdhani', '700 16px Rajdhani'].forEach(f => document.fonts.load(f).catch(() => {}));
+// modo sin conexion: guarda el juego en el aparato la primera vez que se abre
+if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
 </html>

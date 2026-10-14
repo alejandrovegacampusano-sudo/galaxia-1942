@@ -1,0 +1,15 @@
+{
+  "name": "Galaxia 1942",
+  "short_name": "Galaxia 1942",
+  "description": "Shooter arcade que mezcla 1942 y Galaga",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#02040a",
+  "theme_color": "#02040a",
+  "icons": [
+    { "src": "icon.jpg", "sizes": "180x180", "type": "image/jpeg", "purpose": "any" }
+  ]
+}
