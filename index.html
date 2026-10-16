@@ -893,7 +893,7 @@ let capture = null, rescue = null, msg = null, banner = null, shake = 0, flash =
 
 function newPlayer() {
   return { x: W / 2, y: H - 150, vx: 0, vy: 0, ang: 0, aim: 0, bank: 0, roll: 0, rollT: 0, rollDir: 1, rollCD: 0,
-    alive: true, inv: 0, shield: 3, dual: false, w: 0, wlv: [1, 0, 0, 0], cool: 0, firing: false };
+    alive: true, inv: 0, shield: 3, dual: false, w: 0, wlv: [1, 0, 0, 0], wmin: [1, 0, 0, 0], cool: 0, firing: false };
 }
 function startGame() {
   score = 0; lives = 2; bombs = 2; stage = 1; chain = 0; mult = 1;
@@ -1850,7 +1850,7 @@ function hurtPlayer(which) {
   p.shield--; shake += 10; p.inv = 1.1; sfx.hurt(); flash = .25;
   if (p.shield < 0) {
     explode(p.x, p.y, 2.2, '#4fc3ff'); p.alive = false; p.firing = false;
-    p.wlv[p.w] = Math.max(1, p.wlv[p.w] - 1); chain = 0; mult = 1;
+    p.wlv[p.w] = Math.max(p.wmin[p.w], p.wlv[p.w] - 1); chain = 0; mult = 1;
     loseLife();
   }
 }
@@ -1864,7 +1864,12 @@ function collect(it) {
   const wi = WEAPONS.findIndex(w => w.key === it.kind);
   if (wi >= 0) {
     if (p.wlv[wi] >= 3) { addScore(3000); showMsg(WEAPONS[wi].name + ' AL MAXIMO +3000', WEAPONS[wi].col); }
-    else { p.wlv[wi]++; showMsg(WEAPONS[wi].name + (p.wlv[wi] === 1 ? ' DESBLOQUEADO' : ' NIVEL ' + p.wlv[wi]), WEAPONS[wi].col); }
+    else {
+      // toda arma recogida queda al menos en nivel 2 (en nivel 1 los misiles casi no hacen dano)
+      const nueva = p.wlv[wi] === 0;
+      p.wlv[wi] = Math.max(2, p.wlv[wi] + 1); p.wmin[wi] = 2;
+      showMsg(WEAPONS[wi].name + (nueva ? ' DESBLOQUEADO · NIVEL ' : ' NIVEL ') + p.wlv[wi], WEAPONS[wi].col);
+    }
     p.w = wi;
   } else if (it.kind === 'S') { p.shield = 3; showMsg('ESCUDO RECARGADO', '#59ff9a'); }
   else if (it.kind === 'B') { bombs = Math.min(5, bombs + 1); showMsg('+1 BOMBA', '#fff'); }
