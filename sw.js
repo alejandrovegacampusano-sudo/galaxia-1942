@@ -1,6 +1,6 @@
 // Service worker de Galaxia 1942: guarda el juego en el aparato para jugar sin conexion.
 // Al cambiar cualquier archivo del juego, sube VERSION para que los aparatos descarguen la nueva.
-const VERSION = 'galaxia-1942-v1';
+const VERSION = 'galaxia-1942-v2';
 const FILES = [
   './',
   'index.html',
