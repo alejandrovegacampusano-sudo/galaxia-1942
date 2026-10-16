@@ -823,7 +823,7 @@ function onPress(c) {
   if (c === 'KeyB' || c === 'KeyX') doBomb();
   if (c === 'Tab' || c === 'KeyC') cycleWeapon(1);
   if (c === 'KeyR') { aimMode = 'key'; player.aim = 0; }
-  if (c.startsWith('Digit')) { const i = +c.slice(5) - 1; if (i >= 0 && i < 4 && player.wlv[i] > 0 && player.w !== i) { player.w = i; sfx.swap(); } }
+  if (c.startsWith('Digit')) { const i = +c.slice(5) - 1; if (i >= 0 && i < 4) selectWeapon(i); }
 }
 
 // ----------------------------------------------------------- rutas
@@ -893,7 +893,7 @@ let capture = null, rescue = null, msg = null, banner = null, shake = 0, flash =
 
 function newPlayer() {
   return { x: W / 2, y: H - 150, vx: 0, vy: 0, ang: 0, aim: 0, bank: 0, roll: 0, rollT: 0, rollDir: 1, rollCD: 0,
-    alive: true, inv: 0, shield: 3, dual: false, w: 0, wlv: [1, 0, 0, 0], wmin: [1, 0, 0, 0], cool: 0, firing: false };
+    alive: true, inv: 0, shield: 3, dual: false, w: 0, w2: null, wlv: [1, 0, 0, 0], wmin: [1, 0, 0, 0], cools: [0, 0, 0, 0], firing: false };
 }
 function startGame() {
   score = 0; lives = 2; bombs = 2; stage = 1; chain = 0; mult = 1;
@@ -1687,10 +1687,17 @@ function doBomb() {
   if (state !== 'play' || paused || !p.alive || bombs <= 0) return;
   bombs--; shock.push({ x: p.x, y: p.y, r: 0, hit: new Set() }); flash = .6; shake += 18; sfx.bomb();
 }
+// el caza lleva las dos ultimas armas elegidas o recogidas y las dispara juntas
+function activeWeapons() { const p = player; return p.w2 !== null && p.w2 !== p.w && p.wlv[p.w2] > 0 ? [p.w, p.w2] : [p.w]; }
+function selectWeapon(i) {
+  const p = player;
+  if (i === p.w || !p.wlv[i]) return;
+  p.w2 = p.w; p.w = i; sfx.swap();
+}
 function cycleWeapon(d) {
   const p = player; let i = p.w;
   for (let k = 0; k < 4; k++) { i = (i + d + 4) % 4; if (p.wlv[i] > 0) break; }
-  if (i !== p.w) { p.w = i; sfx.swap(); }
+  selectWeapon(i);
 }
 function nearestEnemy(x, y, maxD = 1e9) {
   let best = null, bd = maxD;
@@ -1728,38 +1735,42 @@ function updPlayer(dt) {
   p.roll = p.bank + barrel;
   if (p.rollCD > 0) p.rollCD -= dt;
   if (p.inv > 0) p.inv -= dt;
-  p.cool -= dt;
+  for (let i = 0; i < 4; i++) p.cools[i] -= dt;
   p.firing = (K.Space || K.KeyJ || mouse.down || stick.id !== null) && p.rollT <= 0 && intro < 2.2;
   if (p.firing) fireWeapons();
 }
 function respawn() {
-  Object.assign(player, { alive: true, x: W / 2, y: H - 150, vx: 0, vy: -200, inv: 2.6, shield: 3, rollT: 0, cool: .3, ang: 0, aim: 0 });
+  Object.assign(player, { alive: true, x: W / 2, y: H - 150, vx: 0, vy: -200, inv: 2.6, shield: 3, rollT: 0, cools: [.3, .3, .3, .3], ang: 0, aim: 0 });
 }
 function fireWeapons() {
-  const p = player, lv = p.wlv[p.w];
-  const ships = p.dual ? [0, 1] : [0];
-  if (p.w === 1) return; // el laser se procesa de forma continua
-  if (p.cool > 0) return;
+  const p = player, ships = p.dual ? [0, 1] : [0];
   const [fx, fy] = fwd(p.ang), [rx, ry] = right(p.ang);
-  for (const i of ships) {
-    const [sx, sy] = shipPos(i);
-    if (p.w === 0) {
+  for (const w of activeWeapons()) {
+    if (w === 1 || p.cools[w] > 0) continue; // el laser se procesa de forma continua en updLaser
+    const lv = p.wlv[w];
+    for (const i of ships) fireOne(w, lv, shipPos(i), fx, fy, rx, ry);
+    p.cools[w] = w === 0 ? .1 : w === 2 ? .55 : [.42, .36, .3][lv - 1];
+    [sfx.vulcan, null, sfx.missile, sfx.plasma][w]();
+  }
+}
+function fireOne(w, lv, [sx, sy], fx, fy, rx, ry) {
+  const p = player;
+  {
+    if (w === 0) {
       for (const o of [-6, 6]) shot(sx + rx * o + fx * 20, sy + ry * o + fy * 20, p.ang + rr(.02), 1150, .6, 'v');
       if (lv >= 2) for (const s of [-1, 1]) shot(sx + fx * 14, sy + fy * 14, p.ang + s * .14, 1100, .6, 'v');
       if (lv >= 3) for (const s of [-1, 1]) shot(sx + fx * 10, sy + fy * 10, p.ang + s * .3, 1050, .6, 'v');
-    } else if (p.w === 2) {
+    } else if (w === 2) {
       const n = [2, 4, 6][lv - 1];
       for (let k = 0; k < n; k++) {
         const s = k % 2 ? 1 : -1, a = p.ang + s * (1.2 + (k >> 1) * .35);
         pshots.push({ x: sx + rx * s * 22, y: sy + ry * s * 22, vx: Math.sin(a) * 260, vy: -Math.cos(a) * 260, dmg: 3.2, kind: 'm', r: 6, l: 3, ang: a, sp: 260 });
       }
-    } else if (p.w === 3) {
+    } else if (w === 3) {
       const r = [12, 16, 21][lv - 1];
       pshots.push({ x: sx + fx * 26, y: sy + fy * 26, vx: fx * 600, vy: fy * 600, dmg: [4, 5, 6.5][lv - 1], kind: 'p', r, l: 2, hit: new Set() });
     }
   }
-  p.cool = p.w === 0 ? .1 : p.w === 2 ? .55 : [.42, .36, .3][lv - 1];
-  [sfx.vulcan, null, sfx.missile, sfx.plasma][p.w]();
 }
 function shot(x, y, a, sp, dmg, kind) { pshots.push({ x, y, vx: Math.sin(a) * sp, vy: -Math.cos(a) * sp, dmg, kind, r: 4, l: 1.2, ang: a }); }
 function enemyCircles(e) { return [[e.x, e.y, e.isPart ? e.r : ET[e.type].r]]; }
@@ -1767,7 +1778,7 @@ function hittable(e) { return !e.dead && !e.off && e.state !== 'wait'; }
 function updLaser(dt) {
   lasers = [];
   const p = player;
-  if (!p.alive || p.w !== 1 || !p.firing) return;
+  if (!p.alive || !activeWeapons().includes(1) || !p.firing) return;
   const lv = p.wlv[1], dps = [15, 22, 32][lv - 1], width = [6, 10, 16][lv - 1], pierce = lv >= 3;
   const [fx, fy] = fwd(p.ang);
   for (const i of (p.dual ? [0, 1] : [0])) {
@@ -1863,14 +1874,17 @@ function collect(it) {
   const p = player; sfx.pow();
   const wi = WEAPONS.findIndex(w => w.key === it.kind);
   if (wi >= 0) {
-    if (p.wlv[wi] >= 3) { addScore(3000); showMsg(WEAPONS[wi].name + ' AL MAXIMO +3000', WEAPONS[wi].col); }
+    let s;
+    if (p.wlv[wi] >= 3) { addScore(3000); s = WEAPONS[wi].name + ' AL MAXIMO +3000'; }
     else {
       // toda arma recogida queda al menos en nivel 2 (en nivel 1 los misiles casi no hacen dano)
-      const nueva = p.wlv[wi] === 0;
       p.wlv[wi] = Math.max(2, p.wlv[wi] + 1); p.wmin[wi] = 2;
-      showMsg(WEAPONS[wi].name + (nueva ? ' DESBLOQUEADO · NIVEL ' : ' NIVEL ') + p.wlv[wi], WEAPONS[wi].col);
+      s = WEAPONS[wi].name + ' NV ' + p.wlv[wi];
     }
-    p.w = wi;
+    // la recogida pasa a ser el arma principal y la anterior sigue disparando como segunda
+    if (wi !== p.w) { p.w2 = p.w; p.w = wi; }
+    const act = activeWeapons();
+    showMsg(s + (act.length > 1 ? '  +  ' + WEAPONS[act[1]].name : ''), WEAPONS[wi].col);
   } else if (it.kind === 'S') { p.shield = 3; showMsg('ESCUDO RECARGADO', '#59ff9a'); }
   else if (it.kind === 'B') { bombs = Math.min(5, bombs + 1); showMsg('+1 BOMBA', '#fff'); }
   else { lives++; showMsg('1UP!', '#ff4f5a'); }
@@ -2289,11 +2303,15 @@ function drawHUD() {
   }
   text('ESCUDO', 132, by + 40, 'rgba(160,255,200,.7)', 11, 'left', 'Orbitron');
   const ww = 92, wx0 = W / 2 - ww * 2 - 6, wy = W < 820 ? by - 58 : by;
+  const act = activeWeapons();
   for (let i = 0; i < 4; i++) {
-    const x = wx0 + i * (ww + 4), sel = p.w === i, lv = p.wlv[i], col = WEAPONS[i].col, by = wy;
-    ctx.fillStyle = sel ? 'rgba(10,20,40,.85)' : 'rgba(4,10,24,.5)'; rrect(ctx, x, by, ww, 52, 8); ctx.fill();
-    ctx.strokeStyle = sel ? col : 'rgba(120,200,255,.2)'; ctx.lineWidth = sel ? 2 : 1; ctx.stroke();
-    text((i + 1) + ' ' + (lv ? WEAPONS[i].name : '- - -'), x + ww / 2, by + 18, lv ? (sel ? col : 'rgba(255,255,255,.7)') : 'rgba(255,255,255,.25)', 11, 'center', 'Orbitron', sel ? col : null);
+    const x = wx0 + i * (ww + 4), sel = act[0] === i, sec = act[1] === i, on = sel || sec, lv = p.wlv[i], col = WEAPONS[i].col, by = wy;
+    ctx.fillStyle = on ? 'rgba(10,20,40,.85)' : 'rgba(4,10,24,.5)'; rrect(ctx, x, by, ww, 52, 8); ctx.fill();
+    ctx.globalAlpha = sec ? .65 : 1;
+    ctx.strokeStyle = on ? col : 'rgba(120,200,255,.2)'; ctx.lineWidth = sel ? 2.5 : sec ? 2 : 1; ctx.stroke();
+    ctx.globalAlpha = 1;
+    text((i + 1) + ' ' + (lv ? WEAPONS[i].name : '- - -'), x + ww / 2, by + 18, lv ? (on ? col : 'rgba(255,255,255,.7)') : 'rgba(255,255,255,.25)', 11, 'center', 'Orbitron', sel ? col : null);
+    if (on && act.length > 1) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x + ww - 9, by + 9, 3.5, 0, TAU); ctx.fill(); }
     for (let k = 0; k < 3; k++) { ctx.fillStyle = k < lv ? col : 'rgba(255,255,255,.12)'; ctx.fillRect(x + 18 + k * 20, by + 36, 16, 5); }
   }
   panel(W - 180, by, 170, 52);
@@ -2334,7 +2352,7 @@ function drawTitle() {
   text('KRAKEN: TE CAPTURA', cx + 282, 560, '#dfe8ff', 17, 'left', 'Rajdhani');
   const lines = touchUsed
     ? ['ARRASTRA: MOVER Y DISPARAR (AUTO-APUNTA)', 'BOTONES: GIRO · BOMBA · ARMA']
-    : ['WASD / FLECHAS  mover en todas direcciones', 'RATON  apuntar y disparar   ·   Q / E  girar la nave', 'ESPACIO  disparar   ·   SHIFT / clic der.  tonel evasivo', '1-4 / TAB / rueda  cambiar arma   ·   B  bomba   ·   P  pausa'];
+    : ['WASD / FLECHAS  mover en todas direcciones', 'RATON  apuntar y disparar   ·   Q / E  girar la nave', 'ESPACIO  disparar   ·   SHIFT / clic der.  tonel evasivo', '1-4 / TAB / rueda  elegir arma (disparas 2 a la vez)   ·   B  bomba'];
   lines.forEach((s, i) => text(s, W / 2, 630 + i * 28, 'rgba(200,225,255,.85)', 18, 'center', 'Rajdhani'));
   text('RESCATA TU CAZA CAPTURADO PARA VOLAR EN DOBLE', W / 2, 760, '#4fe3ff', 16, 'center', 'Rajdhani');
   if ((titleT * 2 | 0) % 2 === 0) text(touchUsed ? 'TOCA PARA DESPEGAR' : 'PULSA ESPACIO PARA DESPEGAR', W / 2, 820, '#ffd23f', 22, 'center', 'Orbitron', '#ffd23f');
@@ -2397,7 +2415,7 @@ function frame(now) {
   let dt = Math.min(1 / 30, (now - last) / 1000); last = now;
   if (slowT > 0) { slowT -= dt; dt *= .35; }
   update(dt);
-  laserSound(state === 'play' && !paused && player.alive && player.firing && player.w === 1);
+  laserSound(state === 'play' && !paused && player.alive && player.firing && activeWeapons().includes(1));
   draw();
   requestAnimationFrame(frame);
 }
